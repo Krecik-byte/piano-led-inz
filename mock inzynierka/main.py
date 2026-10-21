@@ -1,6 +1,7 @@
 import sys
 import time
 import pygame
+import serial
 
 from midi_handler import MIDIHandler, load_midi_notes
 from calibration import get_keyboard_config, run_calibration
@@ -13,6 +14,8 @@ WIDTH, HEIGHT = 1100, 750
 KEYBOARD_HEIGHT = 160
 HIT_LINE_Y = HEIGHT - KEYBOARD_HEIGHT
 FALL_SPEED = 280
+NUM_LEDS = 144
+ACTIVE_LEDS = 122
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Piano Hero - System Wspomagania Nauki Gry na Pianinie")
@@ -25,6 +28,15 @@ clock = pygame.time.Clock()
 midi_handler = MIDIHandler()
 MIDI_START, NUM_KEYS = get_keyboard_config(screen, clock, midi_handler, WIDTH, HEIGHT, font, font_big)
 led_width = WIDTH / NUM_KEYS
+
+# Inicjalizacja portu szeregowego do ESP32
+try:
+    ser = serial.Serial("COM3", 115200, timeout=0.01)  # Zmień COM3 na swój port jeśli inny!
+    time.sleep(2)
+    print("[ESP32] Połączono pomyślnie z taśmą LED.")
+except Exception as e:
+    ser = None
+    print(f"[ESP32] Błąd połączenia z portem szeregowym: {e}")
 
 # Ładowanie piosenki
 MIDI_FILE = "song.mid"
@@ -61,6 +73,36 @@ try:
 
         midi_events = midi_handler.read_events()
         next_note, is_waiting = engine.update(dt, midi_events)
+
+       # Wysyłanie stanu klawiszy do ESP32
+        # Wysyłanie stanu klawiszy i podpowiedzi do ESP32
+        if ser and ser.is_open:
+            pressed_notes = list(engine.active_keys)
+            
+            # Zbieramy klawisze naciśnięte przez użytkownika
+            user_indices = []
+            for note in pressed_notes:
+                mapped_led = int((note - MIDI_START) / NUM_KEYS * ACTIVE_LEDS)
+                key_index = (NUM_LEDS - 1) - mapped_led
+                if 0 <= key_index < NUM_LEDS:
+                    user_indices.append(key_index)
+
+            # Sprawdzamy czy mamy podpowiedź (w trybie WAIT)
+            hint_index = -1
+            if next_note and is_waiting:
+                h_note = next_note['note']
+                mapped_hint = int((h_note - MIDI_START) / NUM_KEYS * ACTIVE_LEDS)
+                hint_index = (NUM_LEDS - 1) - mapped_hint
+
+            # Tworzymy komunikat dla ESP32 w formacie: "uzytkownik:10,12|podpowiedz:45" albo prostszym
+            # Przekażmy to jako: "P:10,12|H:45\n" lub po prostu wyślijmy osobno.
+            # Zróbmy prosty format tekstowy rozdzielany średnikiem: "u10,12;h45\n"
+            
+            u_str = ",".join(map(str, user_indices)) if user_indices else "-1"
+            h_str = str(hint_index) if hint_index != -1 else "-1"
+            
+            message = f"U:{u_str}|H:{h_str}\n"
+            ser.write(message.encode("utf-8"))
 
         # RYSOWANIE GRAFIKI
         screen.fill((15, 15, 20))
@@ -133,5 +175,7 @@ try:
 except KeyboardInterrupt:
     pass
 finally:
+    if 'ser' in locals() and ser and ser.is_open:
+        ser.close()
     midi_handler.close()
     pygame.quit()

@@ -66,13 +66,16 @@ try:
                     engine.toggle_mode()
 
         midi_events = midi_handler.read_events()
-        next_note, is_waiting = engine.update(dt, midi_events)
+        
+        # Odbieramy 4 wartości z silnika (dodano upcoming_notes oraz wrong_keys)
+        next_note, is_waiting, upcoming_notes, wrong_keys = engine.update(dt, midi_events)
 
-        # Wysyłanie stanu do ESP3
+        # Wysyłamy pełny stan do ESP32 przez nową metodę
         esp.send_frame(
             active_keys=engine.active_keys,
             next_note=next_note,
-            is_waiting=is_waiting,
+            upcoming_notes=upcoming_notes,
+            wrong_keys=wrong_keys,
             midi_start=MIDI_START,
             num_keys=NUM_KEYS,
             num_leds=NUM_LEDS,
@@ -111,12 +114,15 @@ try:
             n_num = MIDI_START + i
             is_black = BLACK_KEYS[n_num % 12]
             is_pressed = n_num in engine.active_keys
+            is_wrong = n_num in wrong_keys  # Sprawdzamy, czy klawisz jest w zbiorze błędów
             x = i * led_width
 
-            if is_pressed:
-                col = (0, 220, 255)
+            if is_wrong:
+                col = (255, 60, 60)         # Czerwony dla błędu na ekranie
+            elif is_pressed:
+                col = (0, 220, 255)         # Niebieski dla wciśniętego
             elif next_note and is_waiting and n_num == next_note['note']:
-                col = (255, 220, 0)
+                col = (255, 220, 0)         # Żółty dla podpowiedzi
             else:
                 col = (40, 40, 45) if is_black else (230, 230, 230)
 
@@ -140,7 +146,13 @@ try:
         screen.blit(info_surf, (WIDTH - 250, 20))
 
         if time.time() - engine.feedback_timer < 0.6 and engine.feedback_text:
-            col = (0, 255, 120) if engine.feedback_text in ["PERFECT!", "HIT!"] else (255, 200, 0)
+            if engine.feedback_text in ["PERFECT!", "HIT!"]:
+                col = (0, 255, 120)  # Zielony
+            elif engine.feedback_text in ["GOOD"]:
+                col = (255, 220, 0)  # Żółty
+            else:
+                col = (255, 60, 60)  # Czerwony dla WRONG KEY! / MISS!
+
             fb_surf = font_big.render(engine.feedback_text, True, col)
             screen.blit(fb_surf, (WIDTH // 2 - 40, HEIGHT // 2))
 

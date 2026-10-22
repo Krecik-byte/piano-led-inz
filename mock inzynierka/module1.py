@@ -5,16 +5,23 @@ mid = MidiFile()
 track = MidiTrack()
 mid.tracks.append(track)
 
-# Tempo i nuty dla "Wlazł kotek na płotek"
-# Nuty MIDI: G4(67), E4(64), E4(64), F4(65), D4(62), D4(62), C4(60), E4(64), G4(67)
-melodia = [67, 64, 64, 65, 62, 62, 60, 64, 67]
+# Szkocka melodia "Auld Lang Syne" - bardzo prosta, idealna do powolnego grania na 1 rękę
+melodia = [
+    # Pierwsza fraza
+    60, 65, 65, 65, 69, 67, 65, 67, 69, 65, 65, 69, 72, 74,
+    # Druga fraza
+    74, 72, 69, 69, 65, 67, 65, 67, 69, 65, 62, 62, 60, 65,
+    # Refren
+    74, 72, 69, 69, 65, 67, 65, 67, 74, 72, 69, 69, 72, 74,
+    74, 72, 69, 69, 65, 67, 65, 67, 69, 65, 62, 62, 60, 65
+]
 
 first = True
 for note in melodia:
-    time_delay = 960 if first else 0  
+    time_delay = 750 if first else 0  # Bardzo wolne, dostojne tempo
     first = False
     track.append(Message('note_on', note=note, velocity=80, time=time_delay))
-    track.append(Message('note_off', note=note, velocity=0, time=480))  
+    track.append(Message('note_off', note=note, velocity=0, time=600))  
 
 mid.save("song.mid")
-print("Gotowe! Wygenerowano plik song.mid z banalną melodią.")
+print("Gotowe! Wygenerowano plik song.mid z utworem Auld Lang Syne.")

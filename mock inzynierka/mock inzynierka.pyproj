@@ -25,6 +25,9 @@
     <Compile Include="calibration.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="esp_controller.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="game_engine.py">
       <SubType>Code</SubType>
     </Compile>

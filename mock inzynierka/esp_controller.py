@@ -12,30 +12,48 @@ class ESPController:
             self.ser = None
             print(f"[ESP32] Błąd połączenia z portem szeregowym: {e}")
 
-    def send_frame(self, active_keys, next_note, is_waiting, midi_start, num_keys, num_leds=144, active_leds=122):
+    def send_frame(self, active_keys, next_note, upcoming_notes, wrong_keys, midi_start, num_keys, num_leds=144, active_leds=122):
         if not self.ser or not self.ser.is_open:
             return
 
-        #Zbieramy klawisze naciśnięte przez użytkownika
+        #Klawisze wciśnięte przez użytkownika (Niebieski)
         user_indices = []
         for note in active_keys:
-            mapped_led = int((note - midi_start) / num_keys * active_leds)
-            key_index = (num_leds - 1) - mapped_led
-            if 0 <= key_index < num_leds:
-                user_indices.append(key_index)
+            mapped = int((note - midi_start) / num_keys * active_leds)
+            idx = (num_leds - 1) - mapped
+            if 0 <= idx < num_leds:
+                user_indices.append(idx)
 
-        #Sprawdzamy czy mamy podpowiedź (w trybie WAIT)
-        hint_index = -1
-        if next_note and is_waiting:
+        #Błędy użytkownika (Czerwony)
+        wrong_indices = []
+        for note in wrong_keys:
+            mapped = int((note - midi_start) / num_keys * active_leds)
+            idx = (num_leds - 1) - mapped
+            if 0 <= idx < num_leds:
+                wrong_indices.append(idx)
+
+        #Aktualna nuta do wciśnięcia (Żółty - Hit)
+        hit_index = -1
+        if next_note:
             h_note = next_note['note']
-            mapped_hint = int((h_note - midi_start) / num_keys * active_leds)
-            hint_index = (num_leds - 1) - mapped_hint
+            mapped_h = int((h_note - midi_start) / num_keys * active_leds)
+            hit_index = (num_leds - 1) - mapped_h
 
-        #Formatowanie wiadomości tekstowej dla ESP
+        #Nadchodzące nuty - Preview (Przygaszony żółty / pomarańczowy)
+        preview_indices = []
+        for note in upcoming_notes:
+            mapped_p = int((note['note'] - midi_start) / num_keys * active_leds)
+            idx = (num_leds - 1) - mapped_p
+            if 0 <= idx < num_leds and idx != hit_index:
+                preview_indices.append(idx)
+
+        # Formatowanie ramki tekstowej dla ESP32
         u_str = ",".join(map(str, user_indices)) if user_indices else "-1"
-        h_str = str(hint_index) if hint_index != -1 else "-1"
+        w_str = ",".join(map(str, wrong_indices)) if wrong_indices else "-1"
+        h_str = str(hit_index) if hit_index != -1 else "-1"
+        p_str = ",".join(map(str, preview_indices)) if preview_indices else "-1"
         
-        message = f"U:{u_str}|H:{h_str}\n"
+        message = f"U:{u_str}|W:{w_str}|H:{h_str}|P:{p_str}\n"
         try:
             self.ser.write(message.encode("utf-8"))
         except Exception as e:

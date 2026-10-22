@@ -14,52 +14,67 @@ void setup() {
   FastLED.show();
 }
 
+// Pomocnicza funkcja do parsowania rozdzielonych przecinkami indeksów LED
+void parseAndSetLEDs(String part, CRGB color) {
+  if (part == "-1" || part.length() == 0) return;
+
+  int startIndex = 0;
+  int commaIndex = part.indexOf(',');
+
+  while (commaIndex != -1) {
+    String token = part.substring(startIndex, commaIndex);
+    int ledIdx = token.toInt();
+    if (ledIdx >= 0 && ledIdx < NUM_LEDS) {
+      leds[ledIdx] = color;
+      if (ledIdx > 0) leds[ledIdx - 1] = color; // Ewentualne pogrubienie na 2 diody dla szerokości klawisza
+    }
+    startIndex = commaIndex + 1;
+    commaIndex = part.indexOf(',', startIndex);
+  }
+
+  String lastToken = part.substring(startIndex);
+  int ledIdx = lastToken.toInt();
+  if (ledIdx >= 0 && ledIdx < NUM_LEDS) {
+    leds[ledIdx] = color;
+    if (ledIdx > 0) leds[ledIdx - 1] = color;
+  }
+}
+
 void parseAndDraw(String data) {
   FastLED.clear();
 
-  // Oczekiwany format: "U:10,12|H:45" lub "U:-1|H:45" itp.
+  // Oczekiwany format: "U:10,12|W:15|H:45|P:50,52"
+  int wPos = data.indexOf("|W:");
   int hPos = data.indexOf("|H:");
-  if (hPos == -1) return;
+  int pPos = data.indexOf("|P:");
 
-  String userPart = data.substring(2, hPos); // po "U:" do "|H:"
-  String hintPart = data.substring(hPos + 3);   // po "|H:"
+  if (wPos == -1 || hPos == -1 || pPos == -1) return;
 
-  // Rysujemy podpowiedź (Kolor Żółty)
+  String userPart  = data.substring(2, wPos);         // Od "U:" do "|W:"
+  String wrongPart = data.substring(wPos + 3, hPos);  // Od "|W:" do "|H:"
+  String hintPart  = data.substring(hPos + 3, pPos);  // Od "|H:" do "|P:"
+  String prevPart  = data.substring(pPos + 3);        // Od "|P:" do końca
+
+  // 1. Nadchodzące nuty - Preview (Przygaszony pomarańczowy)
+  parseAndSetLEDs(prevPart, CRGB(80, 40, 0));
+
+  // 2. Klawisze wciśnięte przez użytkownika (Niebieski)
+  parseAndSetLEDs(userPart, CRGB(0, 200, 255));
+
+  // 3. Aktualna nuta do wciśnięcia - Hint (Pulsujący żółty)
+  // Rysowany PO użytkowniku, dzięki czemu jeśli trzymasz klawisz, pulsowanie wymusza ponowne uderzenie!
   int hintIdx = hintPart.toInt();
   if (hintIdx >= 0 && hintIdx < NUM_LEDS) {
-    leds[hintIdx] = CRGB(255, 180, 0); // Żółty
-    if (hintIdx > 0) {
-      leds[hintIdx - 1] = CRGB(255, 180, 0);
-    }
+    int pulse = beatsin8(180, 20, 255); // Zwiększona częstotliwość dla wyraźniejszego mrugania
+    CRGB hintColor = CRGB(255, 180, 0);
+    hintColor.nscale8_video(pulse);
+    
+    leds[hintIdx] = hintColor;
+    if (hintIdx > 0) leds[hintIdx - 1] = hintColor;
   }
 
-  // Rysujemy wciśnięte klawisze (Kolor Niebieski)
-  if (userPart != "-1" && userPart.length() > 0) {
-    int startIndex = 0;
-    int commaIndex = userPart.indexOf(',');
-
-    while (commaIndex != -1) {
-      String token = userPart.substring(startIndex, commaIndex);
-      int ledIdx = token.toInt();
-      if (ledIdx >= 0 && ledIdx < NUM_LEDS) {
-        leds[ledIdx] = CRGB(0, 200, 255); // Niebieski
-        if (ledIdx > 0) {
-          leds[ledIdx - 1] = CRGB(0, 200, 255);
-        }
-      }
-      startIndex = commaIndex + 1;
-      commaIndex = userPart.indexOf(',', startIndex);
-    }
-
-    String lastToken = userPart.substring(startIndex);
-    int ledIdx = lastToken.toInt();
-    if (ledIdx >= 0 && ledIdx < NUM_LEDS) {
-      leds[ledIdx] = CRGB(0, 200, 255);
-      if (ledIdx > 0) {
-        leds[ledIdx - 1] = CRGB(0, 200, 255);
-      }
-    }
-  }
+  // 4. Błędy użytkownika (Czerwony) - RYSOWANE NA SAMYM KOŃCU (najwyższy priorytet)
+  parseAndSetLEDs(wrongPart, CRGB(255, 0, 0));
 }
 
 void loop() {

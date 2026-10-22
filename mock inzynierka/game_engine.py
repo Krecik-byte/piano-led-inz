@@ -10,9 +10,9 @@ class GameEngine:
         self.feedback_text = ""
         self.feedback_timer = 0.0
         
-        # Pamięć błędów, żeby czerwony kolor świecił dłużej niż jedną klatkę
-        self.wrong_keys_active = set()
-        self.wrong_timer = 0.0
+        # Pamięć błędów - słownik {note_id: expire_timestamp}
+        # Pozwala na niezależne odliczanie 0.4s dla każdego błędnego klawisza
+        self.wrong_keys_timers = {}
 
     def update(self, dt, events):
         next_note = next((n for n in self.song_notes if not n['hit']), None)
@@ -26,21 +26,6 @@ class GameEngine:
 
         if not is_waiting:
             self.song_virtual_time += dt
-
-        # Wygaszanie błędów po 0.4 sekundy
-        if time.time() - self.wrong_timer > 0.4:
-            self.wrong_keys_active.clear()
-
-        # Kolekcje na bieżącą klatkę dla ESP32
-        upcoming_notes = []
-
-        # Zbieranie nadchodzących nut (Preview) 1.2 sekundy do przodu
-        preview_window = 1.2
-        for n in self.song_notes:
-            if not n['hit']:
-                time_until = n['start_time'] - self.song_virtual_time
-                if 0 < time_until <= preview_window:
-                    upcoming_notes.append(n)
 
         # Obsługa wejścia MIDI
         for status, note, velocity in events:
@@ -65,8 +50,7 @@ class GameEngine:
                                 hit_matched = True
                                 break
                     if not hit_matched:
-                        self.wrong_keys_active.add(note)
-                        self.wrong_timer = time.time()
+                        self.wrong_keys_timers[note] = time.time() + 0.4
                         self.set_feedback("MISS!")
 
                 elif self.game_mode == "WAIT":
@@ -75,15 +59,33 @@ class GameEngine:
                         self.score += 100
                         self.set_feedback("HIT!")
                     else:
-                        self.wrong_keys_active.add(note)
-                        self.wrong_timer = time.time()
+                        self.wrong_keys_timers[note] = time.time() + 0.4
                         self.set_feedback("WRONG KEY!")
 
             elif status == 128 or (status == 144 and velocity == 0):
                 self.active_keys.discard(note)
 
-        # Zwracamy 4 wartości: next_note, is_waiting, upcoming_notes, wrong_keys_active
-        return next_note, is_waiting, upcoming_notes, self.wrong_keys_active
+        # Wygaszanie przedawnionych błędów – usuwamy tylko te, których czas 0.4s minął
+        current_time = time.time()
+        self.wrong_keys_timers = {
+            note: exp_time 
+            for note, exp_time in self.wrong_keys_timers.items() 
+            if exp_time > current_time
+        }
+
+        # Kolekcje na bieżącą klatkę dla ESP32 / UI
+        upcoming_notes = []
+        preview_window = 1.2
+        for n in self.song_notes:
+            if not n['hit']:
+                time_until = n['start_time'] - self.song_virtual_time
+                if 0 < time_until <= preview_window:
+                    upcoming_notes.append(n)
+
+        # Zwracamy zbiór/listę aktywnych błędnych klawiszy dla reszty aplikacji
+        wrong_keys_active = set(self.wrong_keys_timers.keys())
+
+        return next_note, is_waiting, upcoming_notes, wrong_keys_active
 
     def set_feedback(self, text):
         self.feedback_text = text

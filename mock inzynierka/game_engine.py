@@ -11,7 +11,6 @@ class GameEngine:
         self.feedback_timer = 0.0
         
         # Pamięć błędów - słownik {note_id: expire_timestamp}
-        # Pozwala na niezależne odliczanie 0.4s dla każdego błędnego klawisza
         self.wrong_keys_timers = {}
 
     def update(self, dt, events):
@@ -55,17 +54,30 @@ class GameEngine:
 
                 elif self.game_mode == "WAIT":
                     if next_note and note == next_note['note']:
-                        next_note['hit'] = True
-                        self.score += 100
-                        self.set_feedback("HIT!")
+                        if not next_note.get('pressed', False):
+                            next_note['pressed'] = True
+                            next_note['hold_start'] = time.time()
+                            self.score += 100
+                            self.set_feedback("HOLD...")
                     else:
                         self.wrong_keys_timers[note] = time.time() + 0.4
                         self.set_feedback("WRONG KEY!")
 
             elif status == 128 or (status == 144 and velocity == 0):
                 self.active_keys.discard(note)
+                # Nuta w trybie WAIT kończy się dopiero, gdy puścisz właściwy klawisz!
+                if self.game_mode == "WAIT" and next_note and next_note.get('pressed', False):
+                    if note == next_note['note']:
+                        next_note['hit'] = True
 
-        # Wygaszanie przedawnionych błędów – usuwamy tylko te, których czas 0.4s minął
+        # Zabezpieczenie: jeśli ktoś trzyma klawisz w nieskończoność, zamknij nutę po 3s przetrzymania
+        if self.game_mode == "WAIT" and next_note and next_note.get('pressed', False):
+            elapsed = time.time() - next_note['hold_start']
+            duration = next_note.get('duration', 0.5)
+            if elapsed > duration + 3.0:
+                next_note['hit'] = True
+
+        # Wygaszanie przedawnionych błędów
         current_time = time.time()
         self.wrong_keys_timers = {
             note: exp_time 
@@ -73,7 +85,35 @@ class GameEngine:
             if exp_time > current_time
         }
 
-        # Kolekcje na bieżącą klatkę dla ESP32 / UI
+        # Obliczanie stanu LED dla hintu oraz wykrywanie powtórzeń (re-strike)
+        hint_state = 0
+        is_repeated = 0
+
+        if next_note is not None:
+            # Poprawione wykrywanie nut powtarzanych (szukamy przyszłych nut o tej samej wysokości)
+            future_same = [n for n in self.song_notes if not n['hit'] and n['note'] == next_note['note'] and n != next_note]
+            if future_same:
+                next_same = min(future_same, key=lambda x: x['start_time'])
+                if (next_same['start_time'] - next_note['start_time']) < 1.5:
+                    is_repeated = 1
+
+            if is_waiting and next_note.get('pressed', False):
+                elapsed = time.time() - next_note['hold_start']
+                duration = next_note.get('duration', 0.5)
+                
+                if elapsed < (duration * 0.5):
+                    hint_state = 0  # 0% - 50%: Zielony puls
+                elif elapsed < duration:
+                    hint_state = 1  # 50% - 100% (Połowa): Fiolet lub jasna zieleń przy powtórkach
+                elif elapsed < duration + 1.0:
+                    hint_state = 2  # Koniec nuty (do 1s po czasie): Mruganie
+                elif elapsed < duration + 2.0:
+                    hint_state = 3  # Przetrzymanie ~1s: Fiolet+Czerwony (lub Czerwony+Zielony mrugający)
+                else:
+                    hint_state = 4  # Przetrzymanie >= 2s ("w chuj"): Obie czerwone pulsujące
+            else:
+                hint_state = 0
+
         upcoming_notes = []
         preview_window = 1.2
         for n in self.song_notes:
@@ -82,10 +122,9 @@ class GameEngine:
                 if 0 < time_until <= preview_window:
                     upcoming_notes.append(n)
 
-        # Zwracamy zbiór/listę aktywnych błędnych klawiszy dla reszty aplikacji
         wrong_keys_active = set(self.wrong_keys_timers.keys())
 
-        return next_note, is_waiting, upcoming_notes, wrong_keys_active
+        return next_note, is_waiting, upcoming_notes, wrong_keys_active, hint_state, is_repeated
 
     def set_feedback(self, text):
         self.feedback_text = text

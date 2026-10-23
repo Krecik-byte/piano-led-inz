@@ -12,11 +12,11 @@ class ESPController:
             self.ser = None
             print(f"[ESP32] Błąd połączenia z portem szeregowym: {e}")
 
-    def send_frame(self, active_keys, next_note, upcoming_notes, wrong_keys, midi_start, num_keys, num_leds=144, active_leds=122):
+    def send_frame(self, active_keys, next_note, upcoming_notes, wrong_keys, midi_start, num_keys, num_leds=144, active_leds=122, hint_state=0, is_repeated=0):
         if not self.ser or not self.ser.is_open:
             return
 
-        #Klawisze wciśnięte przez użytkownika (Niebieski)
+        # Klawisze wciśnięte przez użytkownika (Niebieski)
         user_indices = []
         for note in active_keys:
             mapped = int((note - midi_start) / num_keys * active_leds)
@@ -24,7 +24,7 @@ class ESPController:
             if 0 <= idx < num_leds:
                 user_indices.append(idx)
 
-        #Błędy użytkownika (Czerwony)
+        # Błędy użytkownika (Czerwony)
         wrong_indices = []
         for note in wrong_keys:
             mapped = int((note - midi_start) / num_keys * active_leds)
@@ -32,14 +32,14 @@ class ESPController:
             if 0 <= idx < num_leds:
                 wrong_indices.append(idx)
 
-        #Aktualna nuta do wciśnięcia (Żółty - Hit)
+        # Aktualna nuta do wciśnięcia (Hit / Hint ze stanem)
         hit_index = -1
         if next_note:
             h_note = next_note['note']
             mapped_h = int((h_note - midi_start) / num_keys * active_leds)
             hit_index = (num_leds - 1) - mapped_h
 
-        #Nadchodzące nuty - Preview (Przygaszony żółty / pomarańczowy)
+        # Nadchodzące nuty - Preview (Przygaszony żółty)
         preview_indices = []
         for note in upcoming_notes:
             mapped_p = int((note['note'] - midi_start) / num_keys * active_leds)
@@ -50,7 +50,13 @@ class ESPController:
         # Formatowanie ramki tekstowej dla ESP32
         u_str = ",".join(map(str, user_indices)) if user_indices else "-1"
         w_str = ",".join(map(str, wrong_indices)) if wrong_indices else "-1"
-        h_str = str(hit_index) if hit_index != -1 else "-1"
+        
+        # TUTAJ DODANO TRZECIĄ WARTOŚĆ (is_repeated): Format "indeks,stan,is_repeated"
+        if hit_index != -1:
+            h_str = f"{hit_index},{hint_state},{1 if is_repeated else 0}"
+        else:
+            h_str = "-1,0,0"
+
         p_str = ",".join(map(str, preview_indices)) if preview_indices else "-1"
         
         message = f"U:{u_str}|W:{w_str}|H:{h_str}|P:{p_str}\n"

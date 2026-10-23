@@ -29,7 +29,7 @@ midi_handler = MIDIHandler()
 MIDI_START, NUM_KEYS = get_keyboard_config(screen, clock, midi_handler, WIDTH, HEIGHT, font, font_big)
 led_width = WIDTH / NUM_KEYS
 
-# Inicjalizacja ESP32 przez nową klasę (zmień "COM3" jeśli potrzebujesz)
+# Inicjalizacja ESP32 przez nową klasę
 esp = ESPController(port="COM3", baudrate=115200)
 
 # Ładowanie piosenki
@@ -67,10 +67,10 @@ try:
 
         midi_events = midi_handler.read_events()
         
-        # Odbieramy 4 wartości z silnika (dodano upcoming_notes oraz wrong_keys)
-        next_note, is_waiting, upcoming_notes, wrong_keys = engine.update(dt, midi_events)
+        # 1. Odbieramy 6 wartości z silnika (w tym is_repeated)
+        next_note, is_waiting, upcoming_notes, wrong_keys, hint_state, is_repeated = engine.update(dt, midi_events)
 
-        # Wysyłamy pełny stan do ESP32 przez nową metodę
+        # 2. Przekazujemy hint_state oraz is_repeated do wysyłki ramki ESP32
         esp.send_frame(
             active_keys=engine.active_keys,
             next_note=next_note,
@@ -79,7 +79,9 @@ try:
             midi_start=MIDI_START,
             num_keys=NUM_KEYS,
             num_leds=NUM_LEDS,
-            active_leds=ACTIVE_LEDS
+            active_leds=ACTIVE_LEDS,
+            hint_state=hint_state,
+            is_repeated=is_repeated
         )
 
         # RYSOWANIE GRAFIKI
@@ -96,19 +98,25 @@ try:
                 if -note_height <= y_pos <= HEIGHT:
                     x_pos = key_idx * led_width
                     
+                    # 3. Synchronizacja kolorów nuty na ekranie ze stanami
                     if n == next_note and is_waiting:
-                        n_color = (0, 255, 0)          # Aktualna nuta do wciśnięcia - Zielona
+                        if hint_state == 1:
+                            n_color = (100, 255, 0) if is_repeated else (180, 0, 255)  # Zielony dla powtórek, fiolet dla zwykłych
+                        elif hint_state >= 2:
+                            n_color = (255, 0, 0)    # Czerwony przy przetrzymaniu/koniec nuty
+                        else:
+                            n_color = (0, 255, 0)    # Zielony na start
                     elif n in upcoming_notes:
-                        n_color = (200, 200, 0)        # Nadchodzące nuty (Preview) - Żółte / Przygaszony żółty
+                        n_color = (200, 200, 0)      # Nadchodzące (Żółte)
                     elif n['hit']:
-                        n_color = (60, 220, 100)       # Trafione
+                        n_color = (60, 220, 100)     # Trafione
                     else:
-                        n_color = (80, 160, 255)       # Pozostałe
+                        n_color = (80, 160, 255)     # Pozostałe
 
                     rect = pygame.Rect(x_pos + 1, y_pos - note_height, led_width - 2, note_height)
                     pygame.draw.rect(screen, n_color, rect, border_radius=4)
 
-        # Linia trafienia (zmieniono kolor oczekiwania na zielony)
+        # Linia trafienia
         line_color = (0, 220, 100) if is_waiting else (255, 60, 60)
         pygame.draw.line(screen, line_color, (0, HIT_LINE_Y), (WIDTH, HIT_LINE_Y), 4 if is_waiting else 3)
 
@@ -117,15 +125,20 @@ try:
             n_num = MIDI_START + i
             is_black = BLACK_KEYS[n_num % 12]
             is_pressed = n_num in engine.active_keys
-            is_wrong = n_num in wrong_keys  # Sprawdzamy, czy klawisz jest w zbiorze błędów
+            is_wrong = n_num in wrong_keys
             x = i * led_width
 
             if is_wrong:
-                col = (255, 60, 60)         # Czerwony dla błędu na ekranie
+                col = (255, 60, 60)          # Czerwony dla błędu
             elif is_pressed:
-                col = (0, 220, 255)         # Niebieski dla wciśniętego
+                col = (0, 220, 255)          # Niebieski dla wciśniętego
             elif next_note and is_waiting and n_num == next_note['note']:
-                col = (0, 255, 0)           # Zmieniono z żółtego na zielony dla podpowiedzi klawisza
+                if hint_state == 1:
+                    col = (100, 255, 0) if is_repeated else (180, 0, 255)
+                elif hint_state >= 2:
+                    col = (255, 0, 0)
+                else:
+                    col = (0, 255, 0)
             else:
                 col = (40, 40, 45) if is_black else (230, 230, 230)
 
@@ -150,11 +163,11 @@ try:
 
         if time.time() - engine.feedback_timer < 0.6 and engine.feedback_text:
             if engine.feedback_text in ["PERFECT!", "HIT!"]:
-                col = (0, 255, 120)  # Zielony
+                col = (0, 255, 120)
             elif engine.feedback_text in ["GOOD"]:
-                col = (0, 220, 100)  # Zmieniono z żółtego na zielony
+                col = (0, 220, 100)
             else:
-                col = (255, 60, 60)  # Czerwony dla WRONG KEY! / MISS!
+                col = (255, 60, 60)
 
             fb_surf = font_big.render(engine.feedback_text, True, col)
             screen.blit(fb_surf, (WIDTH // 2 - 40, HEIGHT // 2))

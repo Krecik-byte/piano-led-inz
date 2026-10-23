@@ -95,18 +95,21 @@ try:
 
                 if -note_height <= y_pos <= HEIGHT:
                     x_pos = key_idx * led_width
+                    
                     if n == next_note and is_waiting:
-                        n_color = (255, 180, 0)
+                        n_color = (0, 255, 0)          # Aktualna nuta do wciśnięcia - Zielona
+                    elif n in upcoming_notes:
+                        n_color = (200, 200, 0)        # Nadchodzące nuty (Preview) - Żółte / Przygaszony żółty
                     elif n['hit']:
-                        n_color = (60, 220, 100)
+                        n_color = (60, 220, 100)       # Trafione
                     else:
-                        n_color = (80, 160, 255)
+                        n_color = (80, 160, 255)       # Pozostałe
 
                     rect = pygame.Rect(x_pos + 1, y_pos - note_height, led_width - 2, note_height)
                     pygame.draw.rect(screen, n_color, rect, border_radius=4)
 
-        # Linia trafienia
-        line_color = (255, 200, 0) if is_waiting else (255, 60, 60)
+        # Linia trafienia (zmieniono kolor oczekiwania na zielony)
+        line_color = (0, 220, 100) if is_waiting else (255, 60, 60)
         pygame.draw.line(screen, line_color, (0, HIT_LINE_Y), (WIDTH, HIT_LINE_Y), 4 if is_waiting else 3)
 
         # Klawiatura
@@ -122,7 +125,7 @@ try:
             elif is_pressed:
                 col = (0, 220, 255)         # Niebieski dla wciśniętego
             elif next_note and is_waiting and n_num == next_note['note']:
-                col = (255, 220, 0)         # Żółty dla podpowiedzi
+                col = (0, 255, 0)           # Zmieniono z żółtego na zielony dla podpowiedzi klawisza
             else:
                 col = (40, 40, 45) if is_black else (230, 230, 230)
 
@@ -134,12 +137,12 @@ try:
         score_surf = font.render(f"PUNKTY: {engine.score}", True, (255, 255, 255))
         screen.blit(score_surf, (20, 20))
 
-        mode_col = (255, 200, 0) if engine.game_mode == "WAIT" else (0, 220, 255)
+        mode_col = (0, 220, 100) if engine.game_mode == "WAIT" else (0, 220, 255)
         mode_surf = font.render(f"TRYB: {engine.game_mode} [M]", True, mode_col)
         screen.blit(mode_surf, (20, 45))
 
         if is_waiting:
-            wait_surf = font.render(">>> OCZEKIWANIE NA WCIŚNIĘCIE KRAWĘDZI KLAWISZA <<<", True, (255, 200, 0))
+            wait_surf = font.render(">>> OCZEKIWANIE NA WCIŚNIĘCIE KRAWĘDZI KLAWISZA <<<", True, (0, 220, 100))
             screen.blit(wait_surf, (WIDTH // 2 - wait_surf.get_width() // 2, 20))
 
         info_surf = font.render("[R] Kalibracja | [M] Tryb", True, (120, 120, 140))
@@ -149,7 +152,7 @@ try:
             if engine.feedback_text in ["PERFECT!", "HIT!"]:
                 col = (0, 255, 120)  # Zielony
             elif engine.feedback_text in ["GOOD"]:
-                col = (255, 220, 0)  # Żółty
+                col = (0, 220, 100)  # Zmieniono z żółtego na zielony
             else:
                 col = (255, 60, 60)  # Czerwony dla WRONG KEY! / MISS!
 

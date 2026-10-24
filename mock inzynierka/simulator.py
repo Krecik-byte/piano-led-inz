@@ -42,14 +42,16 @@ def get_note_sound(note):
         return sound_cache[note]
     
     freq = midi_to_freq(note)
-    duration = 0.6
+    duration = 3.0  # Dłuższy bufor dźwięku, żeby nuta brzmiała podczas trzymania
     sample_rate = 44100
     num_samples = int(sample_rate * duration)
     
     audio_data = bytearray()
     for s in range(num_samples):
         t = s / sample_rate
-        val = int(0.25 * 32767 * math.sin(2 * math.pi * freq * t) * math.exp(-4.0 * t))
+        # Delikatny obwiednia: łagodny start i bardzo wolne opadanie (sustain)
+        env = min(1.0, t / 0.05) * math.exp(-0.3 * t)
+        val = int(0.25 * 32767 * math.sin(2 * math.pi * freq * t) * env)
         audio_data.extend(struct.pack('<h', val))
         
     sound = pygame.mixer.Sound(buffer=bytes(audio_data))
@@ -89,6 +91,7 @@ print("\n--- KLAWIATURA O IDEALNEJ SZEROKOŚCI GOTOWA ---")
 
 running = True
 active_note = None
+active_channel = None  # Przechowuje kanał aktualnie odtwarzanego dźwięku
 
 while running:
     for event in pygame.event.get():
@@ -102,13 +105,22 @@ while running:
                     data['pressed'] = True
                     if midi_out:
                         midi_out.note_on(note, 90)
-                    get_note_sound(note).play()
+                    
+                    # Odtwarzamy dźwięk i zapamiętujemy kanał
+                    sound = get_note_sound(note)
+                    active_channel = sound.play()
                     break
         elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
             if active_note is not None and active_note in key_rects:
                 key_rects[active_note]['pressed'] = False
                 if midi_out:
                     midi_out.note_off(active_note, 0)
+                
+                # Zatrzymujemy dźwięk natychmiast po puszczeniu klawisza myszy
+                if active_channel:
+                    active_channel.stop()
+                    active_channel = None
+                    
                 active_note = None
 
     # Rysowanie interfejsu

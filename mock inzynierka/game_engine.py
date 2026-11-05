@@ -1,4 +1,5 @@
 import time
+from learning_tool import LearningTool
 
 class GameEngine:
     def __init__(self, song_notes):
@@ -10,14 +11,16 @@ class GameEngine:
         self.feedback_text = ""
         self.feedback_timer = 0.0
         
-        # Pamięć błędów - słownik {note_id: expire_timestamp}
-        # Pozwala na niezależne odliczanie 0.4s dla każdego błędnego klawisza
+        # Słownik błędów {note_id: expire_timestamp}
         self.wrong_keys_timers = {}
+
+        # Inicjalizacja modułu odpowiedzialnego stricte za podpowiedzi i edukację
+        self.learning_tool = LearningTool(preview_window=1.2)
 
     def update(self, dt, events):
         next_note = next((n for n in self.song_notes if not n['hit']), None)
 
-        # Logika WAIT MODE
+        # Logika WAIT MODE (zatrzymanie czasu, dopóki gracz nie uderzy właściwej nuty)
         is_waiting = False
         if self.game_mode == "WAIT" and next_note is not None:
             if self.song_virtual_time >= next_note['start_time']:
@@ -65,7 +68,7 @@ class GameEngine:
             elif status == 128 or (status == 144 and velocity == 0):
                 self.active_keys.discard(note)
 
-        # Wygaszanie przedawnionych błędów – usuwamy tylko te, których czas 0.4s minął
+        # Wygaszanie przedawnionych błędów (0.4s)
         current_time = time.time()
         self.wrong_keys_timers = {
             note: exp_time 
@@ -73,19 +76,15 @@ class GameEngine:
             if exp_time > current_time
         }
 
-        # Kolekcje na bieżącą klatkę dla ESP32 / UI
-        upcoming_notes = []
-        preview_window = 1.2
-        for n in self.song_notes:
-            if not n['hit']:
-                time_until = n['start_time'] - self.song_virtual_time
-                if 0 < time_until <= preview_window:
-                    upcoming_notes.append(n)
+        # Pobieramy gotowy zestaw podpowiedzi i stanów wizualnych z modułu edukacyjnego
+        cues = self.learning_tool.get_learning_cues(
+            self.song_notes, 
+            self.song_virtual_time, 
+            self.game_mode, 
+            self.wrong_keys_timers
+        )
 
-        # Zwracamy zbiór/listę aktywnych błędnych klawiszy dla reszty aplikacji
-        wrong_keys_active = set(self.wrong_keys_timers.keys())
-
-        return next_note, is_waiting, upcoming_notes, wrong_keys_active
+        return cues["next_note"], cues["is_waiting"], cues["upcoming_notes"], cues["wrong_keys"]
 
     def set_feedback(self, text):
         self.feedback_text = text

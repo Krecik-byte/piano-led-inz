@@ -29,7 +29,7 @@ midi_handler = MIDIHandler()
 MIDI_START, NUM_KEYS = get_keyboard_config(screen, clock, midi_handler, WIDTH, HEIGHT, font, font_big)
 led_width = WIDTH / NUM_KEYS
 
-# Inicjalizacja ESP32 przez nową klasę (zmień "COM3" jeśli potrzebujesz)
+# Inicjalizacja ESP32 przez klasę
 esp = ESPController(port="COM3", baudrate=115200)
 
 # Ładowanie piosenki
@@ -67,10 +67,10 @@ try:
 
         midi_events = midi_handler.read_events()
         
-        # Odbieramy 4 wartości z silnika (dodano upcoming_notes oraz wrong_keys)
+        # Odbieramy wartości z silnika
         next_note, is_waiting, upcoming_notes, wrong_keys = engine.update(dt, midi_events)
 
-        # Wysyłamy pełny stan do ESP32 przez nową metodę
+        # Wysyłamy pełny stan do ESP32
         esp.send_frame(
             active_keys=engine.active_keys,
             next_note=next_note,
@@ -108,7 +108,7 @@ try:
                     rect = pygame.Rect(x_pos + 1, y_pos - note_height, led_width - 2, note_height)
                     pygame.draw.rect(screen, n_color, rect, border_radius=4)
 
-        # Linia trafienia (zmieniono kolor oczekiwania na zielony)
+        # Linia trafienia
         line_color = (0, 220, 100) if is_waiting else (255, 60, 60)
         pygame.draw.line(screen, line_color, (0, HIT_LINE_Y), (WIDTH, HIT_LINE_Y), 4 if is_waiting else 3)
 
@@ -117,15 +117,15 @@ try:
             n_num = MIDI_START + i
             is_black = BLACK_KEYS[n_num % 12]
             is_pressed = n_num in engine.active_keys
-            is_wrong = n_num in wrong_keys  # Sprawdzamy, czy klawisz jest w zbiorze błędów
+            is_wrong = n_num in wrong_keys
             x = i * led_width
 
             if is_wrong:
-                col = (255, 60, 60)         # Czerwony dla błędu na ekranie
+                col = (255, 60, 60)         # Czerwony dla błędu
             elif is_pressed:
                 col = (0, 220, 255)         # Niebieski dla wciśniętego
             elif next_note and is_waiting and n_num == next_note['note']:
-                col = (0, 255, 0)           # Zmieniono z żółtego na zielony dla podpowiedzi klawisza
+                col = (0, 255, 0)           # Zielony dla podpowiedzi klawisza
             else:
                 col = (40, 40, 45) if is_black else (230, 230, 230)
 
@@ -152,9 +152,9 @@ try:
             if engine.feedback_text in ["PERFECT!", "HIT!"]:
                 col = (0, 255, 120)  # Zielony
             elif engine.feedback_text in ["GOOD"]:
-                col = (0, 220, 100)  # Zmieniono z żółtego na zielony
+                col = (0, 220, 100)  # Zielony
             else:
-                col = (255, 60, 60)  # Czerwony dla WRONG KEY! / MISS!
+                col = (255, 60, 60)  # Czerwony dla błędu
 
             fb_surf = font_big.render(engine.feedback_text, True, col)
             screen.blit(fb_surf, (WIDTH // 2 - 40, HEIGHT // 2))
